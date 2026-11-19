@@ -1,0 +1,66 @@
+name: GITHUB AUTO ENGINE
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+
+      - name: Analyze Project
+        run: python engine/analyzer.py
+
+      - name: Detect Errors
+        run: python engine/error_detector.py
+
+      - name: Multi Language Build
+        run: python engine/real_builder.py
+
+      - name: Upload Build Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GITHUB-AUTO-ENGINE-BUILDS
+          path: |
+            output/builds/
+            logs/
+          if-no-files-found: warn
