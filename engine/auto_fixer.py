@@ -53,16 +53,16 @@ def repair(path):
     line = lines[index]
 
     if re.match(pattern, line):
-        lines[index] = re.sub(pattern, r"\\1():", line)
+        lines[index] = re.sub(pattern, r"\1():", line)
 
-    elif re.match(r"^\\s*print\\(.+\\s*$", line) and not line.rstrip().endswith(")"):
+    elif re.match(r"^\s*print\(.+\s*$", line) and not line.rstrip().endswith(")"):
         lines[index] = line + ")"
 
     else:
         print("[SAFE MODE] No supported repair found.")
         return False
 
-    candidate = "\\n".join(lines) + ("\\n" if source.endswith("\\n") else "")
+    candidate = "\n".join(lines) + ("\n" if source.endswith("\n") else "")
 
     try:
         ast.parse(candidate)

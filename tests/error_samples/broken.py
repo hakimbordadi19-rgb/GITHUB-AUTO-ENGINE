@@ -1,2 +1,2 @@
-def hello():
-    print("BROKEN TEST")
+def broken(
+    print("BROKEN PYTHON"
