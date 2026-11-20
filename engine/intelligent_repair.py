@@ -4,6 +4,7 @@ from engine.analyzer import LANGUAGES
 from engine.error_detector import inspect_file
 from engine.auto_fixer import repair
 from engine.javascript_fixer import repair_javascript
+from engine.php_fixer import repair_php
 
 
 def intelligent_repair(path):
@@ -80,6 +81,28 @@ def intelligent_repair(path):
 
             if result.get("backup"):
                 report["backup"] = result["backup"]
+
+        elif language == "PHP":
+            original = file.read_text(encoding="utf-8")
+            result = repair_php(original)
+
+            if result["success"]:
+                file.write_text(result["fixed_code"], encoding="utf-8")
+                final = inspect_file(str(file), language)
+
+                if final["status"] == "OK":
+                    report["status"] = "REPAIRED"
+                    report["repair_success"] = True
+                    report["final_status"] = "OK"
+                    report["changes"] = result["changes"]
+                else:
+                    file.write_text(original, encoding="utf-8")
+                    report["status"] = "REPAIR_FAILED"
+                    report["repair_success"] = False
+                    report["final_status"] = final["status"]
+            else:
+                report["status"] = "MANUAL_REVIEW_REQUIRED"
+                report["final_status"] = "ERROR"
 
         else:
             report["status"] = "MANUAL_REVIEW_REQUIRED"
