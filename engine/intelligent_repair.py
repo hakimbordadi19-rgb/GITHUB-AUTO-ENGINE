@@ -3,6 +3,7 @@ from pathlib import Path
 from engine.analyzer import LANGUAGES
 from engine.error_detector import inspect_file
 from engine.auto_fixer import repair
+from engine.javascript_fixer import repair_javascript
 
 
 def intelligent_repair(path):
@@ -31,7 +32,6 @@ def intelligent_repair(path):
     report["language"] = language
 
     initial = inspect_file(str(file), language)
-
     report["initial_errors"] = initial["errors"]
 
     if initial["status"] == "OK":
@@ -44,25 +44,46 @@ def intelligent_repair(path):
         report["final_status"] = "SKIPPED"
         return report
 
-    # Auto Fixer currently supports Python syntax repairs only.
-    if language != "Python":
-        report["status"] = "MANUAL_REVIEW_REQUIRED"
-        report["final_status"] = "ERROR"
-        return report
-
     report["repair_attempted"] = True
 
     try:
-        success = repair(str(file))
-        report["repair_success"] = bool(success)
+        if language == "Python":
+            success = repair(str(file))
 
-        final = inspect_file(str(file), language)
-        report["final_status"] = final["status"]
+            final = inspect_file(str(file), language)
+            report["repair_success"] = bool(success)
 
-        if final["status"] == "OK":
-            report["status"] = "REPAIRED"
+            if final["status"] == "OK":
+                report["status"] = "REPAIRED"
+            else:
+                report["status"] = "REPAIR_FAILED"
+
+            report["final_status"] = final["status"]
+
+        elif language == "JavaScript":
+            result = repair_javascript(str(file))
+
+            report["repair_success"] = (
+                result["status"] == "REPAIRED"
+            )
+
+            report["final_status"] = result["status"]
+
+            if result["status"] == "REPAIRED":
+                report["status"] = "REPAIRED"
+            elif result["status"] == "ALREADY_VALID":
+                report["status"] = "ALREADY_CLEAN"
+            elif result["status"] == "UNSUPPORTED_ERROR":
+                report["status"] = "MANUAL_REVIEW_REQUIRED"
+            else:
+                report["status"] = "REPAIR_FAILED"
+
+            if result.get("backup"):
+                report["backup"] = result["backup"]
+
         else:
-            report["status"] = "REPAIR_FAILED"
+            report["status"] = "MANUAL_REVIEW_REQUIRED"
+            report["final_status"] = "ERROR"
 
     except Exception as error:
         report["status"] = "EXCEPTION"

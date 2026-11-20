@@ -7,3 +7,7 @@ engine/backups/
 *.key
 *.pem
 logs/
+
+# Local backup files
+*.backup.py
+*.pre_integration.py

@@ -7,6 +7,7 @@ import tempfile
 import subprocess
 
 CHECKERS = {
+    ".php": "PHP",
     ".py": "Python",
     ".java": "Java",
     ".c": "C",
@@ -33,6 +34,7 @@ def inspect_file(path, language):
     try:
         with tempfile.TemporaryDirectory() as temp:
             commands = {
+                "PHP": ["php", "-l", path],
                 "Python": [sys.executable, "-m", "py_compile", path],
 
                 "Java": [

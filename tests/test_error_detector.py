@@ -29,3 +29,23 @@ def test_unsupported_language(tmp_path):
 
     assert result["status"] == "ERROR"
     assert result["errors"]
+
+
+def test_valid_php(tmp_path):
+    source = tmp_path / "valid.php"
+    source.write_text('<?php\necho "HELLO";\n')
+
+    result = inspect_file(str(source), "PHP")
+
+    assert result["status"] == "OK"
+    assert result["errors"] == []
+
+
+def test_invalid_php(tmp_path):
+    source = tmp_path / "broken.php"
+    source.write_text('<?php\necho "BROKEN"\n')
+
+    result = inspect_file(str(source), "PHP")
+
+    assert result["status"] == "ERROR"
+    assert result["errors"]

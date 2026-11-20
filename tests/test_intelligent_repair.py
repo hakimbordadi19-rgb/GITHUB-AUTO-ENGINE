@@ -108,3 +108,39 @@ def test_repair_exception(tmp_path, monkeypatch):
     result = engine.intelligent_repair(str(file))
 
     assert result["status"] == "EXCEPTION"
+
+
+def test_valid_php_requires_no_repair(tmp_path, monkeypatch):
+    file = tmp_path / "valid.php"
+    file.write_text('<?php echo "OK";')
+
+    monkeypatch.setattr(
+        engine, "inspect_file",
+        lambda *args: {"status": "OK", "errors": []}
+    )
+
+    result = engine.intelligent_repair(str(file))
+
+    assert result["status"] == "ALREADY_CLEAN"
+    assert result["language"] == "PHP"
+    assert result["repair_attempted"] is False
+
+
+def test_broken_php_requires_manual_review(tmp_path, monkeypatch):
+    file = tmp_path / "broken.php"
+    file.write_text('<?php echo "BROKEN"')
+
+    monkeypatch.setattr(
+        engine, "inspect_file",
+        lambda *args: {
+            "status": "ERROR",
+            "errors": [{"type": "PHPError"}]
+        }
+    )
+
+    result = engine.intelligent_repair(str(file))
+
+    assert result["status"] == "MANUAL_REVIEW_REQUIRED"
+    assert result["language"] == "PHP"
+    assert result["repair_attempted"] is True
+    assert result["repair_success"] is False
