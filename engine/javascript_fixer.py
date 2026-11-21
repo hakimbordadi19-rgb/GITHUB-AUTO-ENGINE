@@ -1,15 +1,17 @@
 import re
 import shutil
-import subprocess
-import hashlib
+import tempfile
+import os
 from pathlib import Path
+
+from engine.safe_io import safe_replace
 
 
 def inspect_javascript(path):
     if not shutil.which("node"):
         return {"status": "SKIPPED", "message": "Node.js missing"}
 
-    result = subprocess.run(
+    result = __import__("subprocess").run(
         ["node", "--check", str(path)],
         capture_output=True,
         text=True,
@@ -47,7 +49,6 @@ def repair_javascript(path):
 
     for index, line in enumerate(lines):
         match = pattern.fullmatch(line)
-
         if match:
             lines[index] = match.group(1) + ")"
             repaired = True
@@ -60,48 +61,42 @@ def repair_javascript(path):
     if source.endswith("\n"):
         candidate += "\n"
 
-    temp = file.with_name(file.stem + ".repair.tmp" + file.suffix)
+    temp = None
 
     try:
-        temp.write_text(candidate, encoding="utf-8")
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            suffix=".js",
+            dir=file.parent,
+            delete=False
+        ) as handle:
+            handle.write(candidate)
+            temp = Path(handle.name)
+
         validation = inspect_javascript(temp)
 
         if validation["status"] != "OK":
             return {"status": "VALIDATION_FAILED"}
 
-        digest = hashlib.sha256(
-            str(file.resolve()).encode()
-        ).hexdigest()[:12]
+        backup = safe_replace(
+            file,
+            candidate,
+            backup_dir=file.parent / ".backups"
+        )
 
-        backup_dir = Path("engine/backups")
-        backup_dir.mkdir(parents=True, exist_ok=True)
+        final = inspect_javascript(file)
 
-        backup = backup_dir / f"{file.name}.{digest}.bak"
-
-        if backup.exists():
-            return {"status": "BACKUP_EXISTS"}
-
-        shutil.copy2(file, backup)
-
-        try:
-            file.write_text(candidate, encoding="utf-8")
-
-            final = inspect_javascript(file)
-
-            if final["status"] != "OK":
-                shutil.copy2(backup, file)
-                return {"status": "ROLLBACK"}
-
-        except Exception:
+        if final["status"] != "OK":
             shutil.copy2(backup, file)
-            raise
+            return {"status": "ROLLBACK"}
 
         return {
             "status": "REPAIRED",
-            "backup": str(backup),
+            "backup": backup,
             "validation": "OK"
         }
 
     finally:
-        if temp.exists():
+        if temp and temp.exists():
             temp.unlink()
