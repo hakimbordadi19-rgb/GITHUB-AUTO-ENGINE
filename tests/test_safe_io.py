@@ -1,3 +1,4 @@
+from pathlib import Path
 import os
 
 from engine.safe_io import safe_replace, safe_restore
@@ -69,3 +70,31 @@ def test_safe_replace_rolls_back_on_failure(
         pass
 
     assert file.read_text() == "ORIGINAL"
+
+
+def test_safe_replace_preserves_file_permissions(tmp_path):
+    file = tmp_path / "permissions.py"
+    file.write_text("ORIGINAL")
+    file.chmod(0o640)
+
+    safe_replace(
+        file,
+        "FIXED",
+        backup_dir=tmp_path / "backups"
+    )
+
+    assert file.stat().st_mode & 0o777 == 0o640
+
+
+def test_safe_replace_backup_preserves_permissions(tmp_path):
+    file = tmp_path / "backup_permissions.py"
+    file.write_text("ORIGINAL")
+    file.chmod(0o640)
+
+    backup = safe_replace(
+        file,
+        "FIXED",
+        backup_dir=tmp_path / "backups"
+    )
+
+    assert Path(backup).stat().st_mode & 0o777 == 0o640
