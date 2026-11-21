@@ -1,8 +1,9 @@
 import ast
 import re
-import shutil
 import sys
 from pathlib import Path
+
+from engine.safe_io import safe_replace, safe_restore
 
 
 def inspect(path):
@@ -17,18 +18,14 @@ def inspect(path):
         return False
 
 
-def backup(path):
-    folder = Path("engine/backups")
-    folder.mkdir(parents=True, exist_ok=True)
-    target = folder / Path(path).name
-    shutil.copy2(path, target)
-    print("[BACKUP]", target)
-    return target
-
-
 def repair(path):
     file = Path(path)
-    source = file.read_text(encoding="utf-8")
+
+    try:
+        source = file.read_text(encoding="utf-8")
+    except OSError as exc:
+        print("[ERROR]", str(exc))
+        return False
 
     try:
         ast.parse(source)
@@ -70,18 +67,29 @@ def repair(path):
         print("[SAFE MODE] Proposed repair failed validation.")
         return False
 
-    backup_path = backup(path)
+        backup_path = None
 
     try:
-        file.write_text(candidate, encoding="utf-8")
+        backup_path = safe_replace(
+            file,
+            candidate,
+            backup_dir=file.parent / ".backups"
+        )
+
         ast.parse(file.read_text(encoding="utf-8"))
 
     except Exception as exc:
-        shutil.copy2(backup_path, file)
-        print("[ROLLBACK] Original file restored.")
+        if backup_path is not None:
+            try:
+                safe_restore(file, backup_path)
+                print("[ROLLBACK] Original file restored.")
+            except Exception as restore_exc:
+                print("[ROLLBACK FAILED]", str(restore_exc))
+
         print("[ERROR]", str(exc))
         return False
 
+    print("[BACKUP]", backup_path)
     print("[FIXED]", path)
     print("[VALIDATION] Python syntax OK")
     return True

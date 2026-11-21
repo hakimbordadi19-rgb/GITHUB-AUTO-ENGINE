@@ -12,8 +12,10 @@ def test_repairs_missing_print_parenthesis(tmp_path, monkeypatch):
 
     assert auto_fixer.repair(source) is True
     assert source.read_text() == 'print("HELLO")\n'
-    assert (tmp_path / "engine/backups/broken.py").exists()
 
+    backups = list((tmp_path / ".backups").glob("broken.py.*.bak"))
+    assert len(backups) == 1
+    assert backups[0].read_text(encoding="utf-8") == 'print("HELLO"\n'
 
 def test_valid_file_is_not_modified(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)

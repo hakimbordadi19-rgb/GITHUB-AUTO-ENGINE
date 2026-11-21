@@ -57,3 +57,24 @@ def safe_replace(path, content, backup_dir="engine/backups"):
                 restore_path.unlink()
 
         raise
+
+def safe_restore(path, backup_path):
+    file = Path(path)
+    backup = Path(backup_path)
+
+    if not backup.is_file():
+        raise FileNotFoundError(backup)
+
+    restore_fd, restore_name = tempfile.mkstemp(
+        dir=file.parent,
+        prefix=".restore_"
+    )
+    os.close(restore_fd)
+    restore_path = Path(restore_name)
+
+    try:
+        shutil.copy2(backup, restore_path)
+        os.replace(restore_path, file)
+    finally:
+        if restore_path.exists():
+            restore_path.unlink()
