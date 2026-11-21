@@ -5,6 +5,7 @@ from engine.error_detector import inspect_file
 from engine.auto_fixer import repair
 from engine.javascript_fixer import repair_javascript
 from engine.php_fixer import repair_php
+from engine.safe_io import safe_replace, safe_restore
 
 
 def intelligent_repair(path):
@@ -48,26 +49,28 @@ def intelligent_repair(path):
     report["repair_attempted"] = True
 
     try:
+        # Python repair
         if language == "Python":
             success = repair(str(file))
-
             final = inspect_file(str(file), language)
-            report["repair_success"] = bool(success)
+
+            report["repair_success"] = (
+                bool(success) and final["status"] == "OK"
+            )
+            report["final_status"] = final["status"]
 
             if final["status"] == "OK":
                 report["status"] = "REPAIRED"
             else:
                 report["status"] = "REPAIR_FAILED"
 
-            report["final_status"] = final["status"]
-
+        # JavaScript repair
         elif language == "JavaScript":
             result = repair_javascript(str(file))
 
             report["repair_success"] = (
                 result["status"] == "REPAIRED"
             )
-
             report["final_status"] = result["status"]
 
             if result["status"] == "REPAIRED":
@@ -82,27 +85,46 @@ def intelligent_repair(path):
             if result.get("backup"):
                 report["backup"] = result["backup"]
 
+        # PHP repair
         elif language == "PHP":
             original = file.read_text(encoding="utf-8")
             result = repair_php(original)
 
-            if result["success"]:
-                file.write_text(result["fixed_code"], encoding="utf-8")
-                final = inspect_file(str(file), language)
-
-                if final["status"] == "OK":
-                    report["status"] = "REPAIRED"
-                    report["repair_success"] = True
-                    report["final_status"] = "OK"
-                    report["changes"] = result["changes"]
-                else:
-                    file.write_text(original, encoding="utf-8")
-                    report["status"] = "REPAIR_FAILED"
-                    report["repair_success"] = False
-                    report["final_status"] = final["status"]
-            else:
+            if not result.get("success"):
                 report["status"] = "MANUAL_REVIEW_REQUIRED"
                 report["final_status"] = "ERROR"
+
+            else:
+                backup_path = None
+
+                try:
+                    backup_path = safe_replace(
+                        file,
+                        result["fixed_code"],
+                        backup_dir=file.parent / ".backups"
+                    )
+
+                    final = inspect_file(str(file), language)
+
+                    if final["status"] == "OK":
+                        report["status"] = "REPAIRED"
+                        report["repair_success"] = True
+                        report["final_status"] = "OK"
+                        report["changes"] = result["changes"]
+                        report["backup"] = backup_path
+
+                    else:
+                        safe_restore(file, backup_path)
+                        backup_path = None
+
+                        report["status"] = "REPAIR_FAILED"
+                        report["repair_success"] = False
+                        report["final_status"] = final["status"]
+
+                except Exception:
+                    if backup_path is not None:
+                        safe_restore(file, backup_path)
+                    raise
 
         else:
             report["status"] = "MANUAL_REVIEW_REQUIRED"
