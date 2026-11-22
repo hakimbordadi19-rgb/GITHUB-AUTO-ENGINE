@@ -23,3 +23,18 @@ def test_original_code_preserved():
     result = repair_php(code)
 
     assert result["fixed_code"] == code
+
+
+def test_inspect_php_handles_missing_binary(monkeypatch):
+    def fail_run(*args, **kwargs):
+        raise FileNotFoundError("PHP binary not found")
+
+    monkeypatch.setattr(
+        "engine.php_fixer.subprocess.run",
+        fail_run
+    )
+
+    result = inspect_php('<?php echo "Hello";')
+
+    assert result["valid"] is False
+    assert "PHP binary not found" in result["error"]
