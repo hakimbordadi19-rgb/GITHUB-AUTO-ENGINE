@@ -67,7 +67,7 @@ def repair(path):
         print("[SAFE MODE] Proposed repair failed validation.")
         return False
 
-        backup_path = None
+    backup_path = None
 
     try:
         backup_path = safe_replace(
