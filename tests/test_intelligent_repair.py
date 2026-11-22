@@ -1,3 +1,4 @@
+from pathlib import Path
 from engine import intelligent_repair as engine
 
 
@@ -144,3 +145,41 @@ def test_broken_php_requires_manual_review(tmp_path, monkeypatch):
     assert result["language"] == "PHP"
     assert result["repair_attempted"] is True
     assert result["repair_success"] is False
+
+
+def test_successful_php_repair_creates_backup(tmp_path, monkeypatch):
+    file = tmp_path / "broken.php"
+    original = '<?php echo "BROKEN"'
+    fixed = '<?php echo "FIXED";'
+    file.write_text(original, encoding="utf-8")
+
+    calls = {"count": 0}
+
+    def fake_inspect(path, language):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return {"status": "ERROR", "errors": [{"type": "PHPError"}]}
+        return {"status": "OK", "errors": []}
+
+    monkeypatch.setattr(engine, "inspect_file", fake_inspect)
+    monkeypatch.setattr(
+        engine,
+        "repair_php",
+        lambda source: {
+            "success": True,
+            "fixed_code": fixed,
+            "changes": ["Added missing semicolon"],
+            "error": None
+        }
+    )
+
+    result = engine.intelligent_repair(str(file))
+
+    assert result["status"] == "REPAIRED"
+    assert result["repair_success"] is True
+    assert result["final_status"] == "OK"
+    assert file.read_text(encoding="utf-8") == fixed
+
+    backup = Path(result["backup"])
+    assert backup.is_file()
+    assert backup.read_text(encoding="utf-8") == original
