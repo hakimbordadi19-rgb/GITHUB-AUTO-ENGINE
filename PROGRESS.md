@@ -15,7 +15,12 @@
 - JavaScript tests: 5/5 passed
 
 ### Latest full test result
-30 passed in 7.70 seconds
+50 passed in 8.41 seconds
+
+### New safety coverage
+- Safe restore failure cleanup test
+- Verified temporary restore files are removed on failure
+- Verified original target remains unchanged
 
 ### Remaining
 - Connect Python fixer to safe I/O

@@ -98,3 +98,33 @@ def test_safe_replace_backup_preserves_permissions(tmp_path):
     )
 
     assert Path(backup).stat().st_mode & 0o777 == 0o640
+
+def test_safe_restore_cleans_temp_file_on_failure(
+    tmp_path, monkeypatch
+):
+    import engine.safe_io as safe_io
+
+    file = tmp_path / "test.py"
+    file.write_text("FIXED")
+
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+
+    backup = backup_dir / "original.bak"
+    backup.write_text("ORIGINAL")
+
+    def failing_replace(src, dst):
+        raise OSError("Simulated restore failure")
+
+    monkeypatch.setattr(
+        safe_io.os, "replace", failing_replace
+    )
+
+    try:
+        safe_io.safe_restore(file, backup)
+        assert False, "Expected OSError"
+    except OSError:
+        pass
+
+    assert file.read_text() == "FIXED"
+    assert not list(tmp_path.glob(".restore_*"))
