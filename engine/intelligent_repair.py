@@ -155,7 +155,3 @@ if __name__ == "__main__":
 
     result = intelligent_repair(sys.argv[1])
     print(json.dumps(result, indent=4, ensure_ascii=False))
-    assert calls["count"] == 2
-
-
-def test_php_rollback_failure_is_reported(tmp_path, monkeypatch):
