@@ -52,3 +52,57 @@ def test_analyzer_main_execution(tmp_path, monkeypatch, capsys):
 
     assert '"language": "Python"' in output
     assert "Files analyzed: 1" in output
+
+
+def test_analyze_returns_file_sizes(tmp_path):
+    file = tmp_path / "main.py"
+    file.write_text("print('hello')", encoding="utf-8")
+
+    results = analyze(tmp_path)
+
+    assert len(results) == 1
+    assert results[0]["size"] == file.stat().st_size
+
+
+def test_analyze_multiple_languages_and_sizes(tmp_path):
+    (tmp_path / "main.py").write_text("print(1)", encoding="utf-8")
+    (tmp_path / "app.js").write_text("console.log(1)", encoding="utf-8")
+    (tmp_path / "index.php").write_text("<?php echo 1;", encoding="utf-8")
+
+    results = analyze(tmp_path)
+
+    assert len(results) == 3
+    assert {item["language"] for item in results} == {
+        "Python", "JavaScript", "PHP"
+    }
+    assert all(item["size"] > 0 for item in results)
+
+
+def test_project_statistics_empty_project(tmp_path):
+    from engine.analyzer import project_statistics
+
+    result = project_statistics(tmp_path)
+
+    assert result["total_files"] == 0
+    assert result["total_size"] == 0
+    assert result["average_size"] == 0
+    assert result["languages"] == {}
+
+
+def test_project_statistics_counts_languages(tmp_path):
+    from engine.analyzer import project_statistics
+
+    (tmp_path / "main.py").write_text("print(1)", encoding="utf-8")
+    (tmp_path / "app.js").write_text("console.log(1)", encoding="utf-8")
+    (tmp_path / "index.php").write_text("<?php echo 1;", encoding="utf-8")
+
+    result = project_statistics(tmp_path)
+
+    assert result["total_files"] == 3
+    assert result["total_size"] > 0
+    assert result["average_size"] > 0
+    assert result["languages"] == {
+        "Python": 1,
+        "JavaScript": 1,
+        "PHP": 1,
+    }

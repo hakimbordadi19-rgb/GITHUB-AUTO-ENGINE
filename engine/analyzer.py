@@ -32,6 +32,26 @@ def analyze(path):
                 })
 
     return results
+def project_statistics(path):
+    results = analyze(path)
+
+    total_files = len(results)
+    total_size = sum(item["size"] for item in results)
+
+    languages = {}
+
+    for item in results:
+        language = item["language"]
+        languages[language] = languages.get(language, 0) + 1
+
+    average_size = total_size / total_files if total_files else 0
+
+    return {
+        "total_files": total_files,
+        "total_size": total_size,
+        "average_size": average_size,
+        "languages": languages
+    }
 
 if __name__ == "__main__":
     data = analyze("projects")
