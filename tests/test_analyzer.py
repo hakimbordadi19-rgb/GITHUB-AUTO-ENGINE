@@ -106,3 +106,17 @@ def test_project_statistics_counts_languages(tmp_path):
         "JavaScript": 1,
         "PHP": 1,
     }
+
+def test_project_statistics_counts_extensions(tmp_path):
+    from engine.analyzer import project_statistics
+
+    (tmp_path / "main.py").write_text("print(1)", encoding="utf-8")
+    (tmp_path / "utils.py").write_text("print(2)", encoding="utf-8")
+    (tmp_path / "app.js").write_text("console.log(1)", encoding="utf-8")
+
+    result = project_statistics(tmp_path)
+
+    assert result["extensions"] == {
+        ".py": 2,
+        ".js": 1,
+    }
