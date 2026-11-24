@@ -1,3 +1,4 @@
+
 import json
 import sys
 from pathlib import Path
@@ -21,8 +22,10 @@ def run_project(target):
         "files_scanned": 0,
         "files_ignored": 0,
         "repaired": 0,
+        "already_clean": 0,
         "failed": 0,
         "manual_review": 0,
+        "checker_unavailable": 0,
         "languages": {},
         "results": []
     }
@@ -32,10 +35,10 @@ def run_project(target):
         return report
 
     if path.is_file():
-        if any(part in EXCLUDED for part in path.parts):
-            candidates = []
-        else:
-            candidates = [path]
+        candidates = (
+            [] if any(part in EXCLUDED for part in path.parts)
+            else [path]
+        )
     else:
         candidates = [
             item for item in path.rglob("*")
@@ -58,11 +61,25 @@ def run_project(target):
         result = intelligent_repair(str(file))
         report["results"].append(result)
 
-        if result["status"] == "REPAIRED":
+        status = result.get("status")
+
+        if status == "REPAIRED":
             report["repaired"] += 1
-        elif result["status"] in ("REPAIR_FAILED", "EXCEPTION"):
+
+        elif status == "ALREADY_CLEAN":
+            report["already_clean"] += 1
+
+        elif status == "CHECKER_UNAVAILABLE":
+            report["checker_unavailable"] += 1
+
+        elif status in (
+            "REPAIR_FAILED",
+            "EXCEPTION",
+            "ROLLBACK_FAILED"
+        ):
             report["failed"] += 1
-        elif result["status"] == "MANUAL_REVIEW_REQUIRED":
+
+        elif status == "MANUAL_REVIEW_REQUIRED":
             report["manual_review"] += 1
 
     report["status"] = "COMPLETED"

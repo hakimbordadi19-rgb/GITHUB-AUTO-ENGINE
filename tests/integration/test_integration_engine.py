@@ -204,3 +204,49 @@ def test_run_project_ignores_file_inside_excluded_directory(
 
     assert len(calls) == 0
     assert result["files_scanned"] == 0
+
+
+def test_run_project_counts_already_clean(tmp_path, monkeypatch):
+    file = tmp_path / "clean.py"
+    file.write_text("print('hello')")
+
+    monkeypatch.setattr(
+        "engine.integration_engine.intelligent_repair",
+        lambda path: {"status": "ALREADY_CLEAN"}
+    )
+
+    result = run_project(file)
+
+    assert result["files_scanned"] == 1
+    assert result["already_clean"] == 1
+    assert result["repaired"] == 0
+
+
+def test_run_project_counts_checker_unavailable(tmp_path, monkeypatch):
+    file = tmp_path / "main.py"
+    file.write_text("print('hello')")
+
+    monkeypatch.setattr(
+        "engine.integration_engine.intelligent_repair",
+        lambda path: {"status": "CHECKER_UNAVAILABLE"}
+    )
+
+    result = run_project(file)
+
+    assert result["files_scanned"] == 1
+    assert result["checker_unavailable"] == 1
+
+
+def test_run_project_counts_rollback_failed(tmp_path, monkeypatch):
+    file = tmp_path / "broken.py"
+    file.write_text("invalid code")
+
+    monkeypatch.setattr(
+        "engine.integration_engine.intelligent_repair",
+        lambda path: {"status": "ROLLBACK_FAILED"}
+    )
+
+    result = run_project(file)
+
+    assert result["files_scanned"] == 1
+    assert result["failed"] == 1
