@@ -32,7 +32,10 @@ def run_project(target):
         return report
 
     if path.is_file():
-        candidates = [path]
+        if any(part in EXCLUDED for part in path.parts):
+            candidates = []
+        else:
+            candidates = [path]
     else:
         candidates = [
             item for item in path.rglob("*")
