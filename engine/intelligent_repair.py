@@ -114,8 +114,16 @@ def intelligent_repair(path):
                         report["backup"] = backup_path
 
                     else:
-                        safe_restore(file, backup_path)
-                        backup_path = None
+                        try:
+                            safe_restore(file, backup_path)
+                            backup_path = None
+                        except Exception as restore_error:
+                            report["status"] = "ROLLBACK_FAILED"
+                            report["repair_success"] = False
+                            report["final_status"] = final["status"]
+                            report["exception"] = str(restore_error)
+                            backup_path = None
+                            return report
 
                         report["status"] = "REPAIR_FAILED"
                         report["repair_success"] = False
@@ -147,3 +155,7 @@ if __name__ == "__main__":
 
     result = intelligent_repair(sys.argv[1])
     print(json.dumps(result, indent=4, ensure_ascii=False))
+    assert calls["count"] == 2
+
+
+def test_php_rollback_failure_is_reported(tmp_path, monkeypatch):

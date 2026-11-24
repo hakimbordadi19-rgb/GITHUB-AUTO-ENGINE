@@ -218,3 +218,29 @@ def test_php_repair_failure_restores_original_file(tmp_path, monkeypatch):
     assert result["repair_success"] is False
     assert file.read_text(encoding="utf-8") == original
     assert calls["count"] == 2
+def test_php_rollback_failure_is_reported(tmp_path, monkeypatch):
+    file = tmp_path / "broken.php"
+    file.write_text("<?php echo 'broken';", encoding="utf-8")
+
+    def fake_repair(source):
+        return {
+            "success": True,
+            "fixed_code": "<?php echo 'fixed';",
+            "changes": ["test change"]
+        }
+
+    def failed_inspect(path, language):
+        return {"status": "ERROR", "errors": ["Syntax error"]}
+
+    def failed_restore(path, backup):
+        raise OSError("Simulated PHP rollback failure")
+
+    monkeypatch.setattr(engine, "repair_php", fake_repair)
+    monkeypatch.setattr(engine, "inspect_file", failed_inspect)
+    monkeypatch.setattr(engine, "safe_restore", failed_restore)
+
+    result = engine.intelligent_repair(str(file))
+
+    assert result["status"] == "ROLLBACK_FAILED"
+    assert "Simulated PHP rollback failure" in result["exception"]
+    assert file.read_text(encoding="utf-8") == "<?php echo 'fixed';"
