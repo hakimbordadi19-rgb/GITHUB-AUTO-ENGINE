@@ -2,9 +2,10 @@ from pathlib import Path
 
 from engine.analyzer import LANGUAGES
 from engine.error_detector import inspect_file
-from engine.auto_fixer import repair
+from engine.auto_fixer import repair_detailed
 from engine.javascript_fixer import repair_javascript
 from engine.php_fixer import repair_php
+from engine.multi_language_fixer import repair_multilanguage
 from engine.safe_io import safe_replace, safe_restore
 
 
@@ -49,22 +50,40 @@ def intelligent_repair(path):
     report["repair_attempted"] = True
 
     try:
-        # Python repair
+                # Python repair
         if language == "Python":
-            success = repair(str(file))
-            final = inspect_file(str(file), language)
+            result = repair_detailed(str(file))
 
+            report["final_status"] = (
+    "OK" if result["status"] in ("REPAIRED", "ALREADY_CLEAN")
+    else result["status"]
+)
             report["repair_success"] = (
-                bool(success) and final["status"] == "OK"
+                result["status"] == "REPAIRED"
             )
-            report["final_status"] = final["status"]
 
-            if final["status"] == "OK":
+            if result.get("backup"):
+                report["backup"] = result["backup"]
+
+            if result.get("error"):
+                report["exception"] = result["error"]
+
+            if result["status"] == "ROLLBACK_FAILED":
+                report["status"] = "ROLLBACK_FAILED"
+
+            elif result["status"] == "REPAIRED":
                 report["status"] = "REPAIRED"
+
+            elif result["status"] == "ALREADY_CLEAN":
+                report["status"] = "ALREADY_CLEAN"
+
+            elif result["status"] == "MANUAL_REVIEW_REQUIRED":
+                report["status"] = "MANUAL_REVIEW_REQUIRED"
+
             else:
                 report["status"] = "REPAIR_FAILED"
 
-        # JavaScript repair
+                    # JavaScript repair
         elif language == "JavaScript":
             result = repair_javascript(str(file))
 
@@ -95,7 +114,6 @@ def intelligent_repair(path):
                 report["final_status"] = "ERROR"
 
             else:
-                backup_path = None
 
                 try:
                     backup_path = safe_replace(
@@ -133,6 +151,33 @@ def intelligent_repair(path):
                     if backup_path is not None:
                         safe_restore(file, backup_path)
                     raise
+
+        # Java, C, C++, Go and Rust repair
+        elif language in ("Java", "C", "C++", "Go", "Rust"):
+            result = repair_multilanguage(str(file), language)
+
+            report["final_status"] = (
+                "OK" if result["status"] == "REPAIRED"
+                else result["status"]
+            )
+            report["repair_success"] = (
+                result["status"] == "REPAIRED"
+            )
+
+            if result.get("backup"):
+                report["backup"] = result["backup"]
+
+            if result.get("error"):
+                report["exception"] = result["error"]
+
+            if result["status"] == "REPAIRED":
+                report["status"] = "REPAIRED"
+            elif result["status"] == "ROLLBACK_FAILED":
+                report["status"] = "ROLLBACK_FAILED"
+            elif result["status"] == "MANUAL_REVIEW_REQUIRED":
+                report["status"] = "MANUAL_REVIEW_REQUIRED"
+            else:
+                report["status"] = "REPAIR_FAILED"
 
         else:
             report["status"] = "MANUAL_REVIEW_REQUIRED"

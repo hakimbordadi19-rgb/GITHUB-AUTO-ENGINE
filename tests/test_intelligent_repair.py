@@ -69,7 +69,11 @@ def test_successful_repair(tmp_path, monkeypatch):
         return {"status": "OK", "errors": []}
 
     monkeypatch.setattr(engine, "inspect_file", fake_inspect)
-    monkeypatch.setattr(engine, "repair", lambda path: True)
+    monkeypatch.setattr(
+    engine,
+    "repair_detailed",
+    lambda path: {"status": "REPAIRED"}
+)
 
     result = engine.intelligent_repair(str(file))
 
@@ -85,7 +89,11 @@ def test_repair_failure(tmp_path, monkeypatch):
         engine, "inspect_file",
         lambda *args: {"status": "ERROR", "errors": []}
     )
-    monkeypatch.setattr(engine, "repair", lambda path: False)
+    monkeypatch.setattr(
+    engine,
+    "repair_detailed",
+    lambda path: {"status": "REPAIR_FAILED"}
+)
 
     result = engine.intelligent_repair(str(file))
 
@@ -104,7 +112,7 @@ def test_repair_exception(tmp_path, monkeypatch):
     def raise_error(path):
         raise RuntimeError("Test exception")
 
-    monkeypatch.setattr(engine, "repair", raise_error)
+    monkeypatch.setattr(engine, "repair_detailed", raise_error)
 
     result = engine.intelligent_repair(str(file))
 
@@ -244,3 +252,114 @@ def test_php_rollback_failure_is_reported(tmp_path, monkeypatch):
     assert result["status"] == "ROLLBACK_FAILED"
     assert "Simulated PHP rollback failure" in result["exception"]
     assert file.read_text(encoding="utf-8") == "<?php echo 'fixed';"
+
+
+import shutil
+import pytest
+
+
+@pytest.mark.parametrize(
+    "language, filename",
+    [
+        ("Java", "Broken.java"),
+        ("C", "broken.c"),
+        ("C++", "broken.cpp"),
+        ("Go", "broken.go"),
+        ("Rust", "broken.rs"),
+    ],
+)
+def test_multilanguage_repair_integration(
+    tmp_path, language, filename
+):
+    from engine.analyzer import LANGUAGES
+
+    source = Path("tests/error_samples") / filename
+
+    if not source.is_file():
+        pytest.skip(f"Missing fixture: {filename}")
+
+    suffix = source.suffix
+    assert LANGUAGES[suffix] == language
+
+    target = tmp_path / filename
+    shutil.copy2(source, target)
+
+    result = engine.intelligent_repair(str(target))
+
+    assert result["status"] == "REPAIRED"
+    assert result["language"] == language
+    assert result["repair_attempted"] is True
+    assert result["repair_success"] is True
+    assert result["final_status"] == "OK"
+
+    assert Path(result["backup"]).is_file()
+
+
+@pytest.mark.parametrize(
+    "language, filename",
+    [
+        ("Java", "Broken.java"),
+        ("C", "broken.c"),
+        ("C++", "broken.cpp"),
+        ("Go", "broken.go"),
+        ("Rust", "broken.rs"),
+    ],
+)
+def test_multilanguage_rollback_restores_original(
+    tmp_path, monkeypatch, language, filename
+):
+    from engine import multi_language_fixer as fixer
+
+    source = Path("tests/error_samples") / filename
+    target = tmp_path / filename
+    shutil.copy2(source, target)
+    original = target.read_text(encoding="utf-8")
+
+    calls = {"count": 0}
+
+    def fake_inspect(path, lang):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return {"status": "ERROR", "errors": ["initial error"]}
+        if calls["count"] == 2:
+            return {"status": "OK", "errors": []}
+        return {"status": "ERROR", "errors": ["final error"]}
+
+    monkeypatch.setattr(fixer, "inspect_file", fake_inspect)
+
+    result = fixer.repair_multilanguage(target, language)
+
+    assert result["status"] == "REPAIR_FAILED"
+    assert result["rollback_attempted"] is True
+    assert result["rollback_success"] is True
+    assert target.read_text(encoding="utf-8") == original
+
+
+def test_multilanguage_rollback_failure(tmp_path, monkeypatch):
+    from engine import multi_language_fixer as fixer
+
+    source = Path("tests/error_samples/Broken.java")
+    target = tmp_path / "Broken.java"
+    shutil.copy2(source, target)
+
+    calls = {"count": 0}
+
+    def fake_inspect(path, language):
+        calls["count"] += 1
+        if calls["count"] < 3:
+            return {"status": "ERROR" if calls["count"] == 1 else "OK",
+                    "errors": []}
+        return {"status": "ERROR", "errors": ["final error"]}
+
+    monkeypatch.setattr(fixer, "inspect_file", fake_inspect)
+    monkeypatch.setattr(
+        fixer, "safe_restore",
+        lambda *args: (_ for _ in ()).throw(OSError("rollback test"))
+    )
+
+    result = fixer.repair_multilanguage(target, "Java")
+
+    assert result["status"] == "ROLLBACK_FAILED"
+    assert result["rollback_attempted"] is True
+    assert result["rollback_success"] is False
+    assert "rollback test" in result["error"]
