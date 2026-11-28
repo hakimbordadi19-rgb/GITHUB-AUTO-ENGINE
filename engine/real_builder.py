@@ -174,7 +174,16 @@ def build_all():
     for name, command in jobs:
         print(f"\n[BUILDING] {name}")
 
-        source_file = command[-1]
+        source_files = {
+            "Python": f"{BASE}/main.py",
+            "Java": f"{BASE}/Main.java",
+            "C": f"{BASE}/main.c",
+            "C++": f"{BASE}/main.cpp",
+            "JavaScript": f"{BASE}/main.js",
+            "Go": f"{BASE}/main.go",
+            "Rust": f"{BASE}/main.rs",
+        }
+        source_file = source_files[name]
         result = build_file(source_file, name)
 
         if result["status"] == "SUCCESS":
