@@ -170,3 +170,104 @@ def test_check_tools_timeout(monkeypatch, capsys):
     assert result["Python"] is False
     assert result["Java"] is True
     assert "[TIMEOUT] Python" in capsys.readouterr().out
+
+
+def test_build_file_success(monkeypatch, tmp_path):
+    source = tmp_path / "main.c"
+    source.write_text("int main(void) { return 0; }")
+
+    monkeypatch.setattr(
+        real_builder.shutil, "which",
+        lambda tool: "/fake/" + tool
+    )
+    monkeypatch.setattr(
+        real_builder.subprocess, "run",
+        lambda *a, **k: SimpleNamespace(
+            returncode=0, stdout="", stderr=""
+        )
+    )
+
+    result = real_builder.build_file(
+        source, "C", tmp_path / "build"
+    )
+
+    assert result["status"] == "SUCCESS"
+    assert result["artifact_type"] == "executable"
+    assert result["output"].endswith("main")
+
+
+def test_build_file_missing_source(tmp_path):
+    result = real_builder.build_file(
+        tmp_path / "missing.c", "C"
+    )
+
+    assert result["status"] == "NOT_FOUND"
+
+
+def test_build_file_unsupported_language(tmp_path):
+    source = tmp_path / "main.xyz"
+    source.write_text("sample")
+
+    result = real_builder.build_file(source, "Unknown")
+
+    assert result["status"] == "UNSUPPORTED"
+
+
+def test_build_file_missing_tool(monkeypatch, tmp_path):
+    source = tmp_path / "main.c"
+    source.write_text("int main(void) { return 0; }")
+
+    monkeypatch.setattr(
+        real_builder.shutil, "which",
+        lambda tool: None
+    )
+
+    result = real_builder.build_file(source, "C")
+
+    assert result["status"] == "CHECKER_UNAVAILABLE"
+
+
+def test_build_file_compiler_failure(monkeypatch, tmp_path):
+    source = tmp_path / "main.c"
+    source.write_text("invalid code")
+
+    monkeypatch.setattr(
+        real_builder.shutil, "which",
+        lambda tool: "/fake/" + tool
+    )
+    monkeypatch.setattr(
+        real_builder.subprocess, "run",
+        lambda *a, **k: SimpleNamespace(
+            returncode=1,
+            stdout="",
+            stderr="compiler error"
+        )
+    )
+
+    result = real_builder.build_file(source, "C")
+
+    assert result["status"] == "FAILED"
+    assert "compiler error" in result["error"]
+
+
+def test_build_file_timeout(monkeypatch, tmp_path):
+    source = tmp_path / "main.c"
+    source.write_text("int main(void) { return 0; }")
+
+    monkeypatch.setattr(
+        real_builder.shutil, "which",
+        lambda tool: "/fake/" + tool
+    )
+
+    def fake_run(command, **kwargs):
+        raise real_builder.subprocess.TimeoutExpired(
+            command, kwargs["timeout"]
+        )
+
+    monkeypatch.setattr(
+        real_builder.subprocess, "run", fake_run
+    )
+
+    result = real_builder.build_file(source, "C")
+
+    assert result["status"] == "TIMEOUT"
